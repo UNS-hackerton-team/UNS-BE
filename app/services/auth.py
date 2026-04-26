@@ -5,7 +5,7 @@ import hmac
 import os
 import sqlite3
 
-from app.db.database import get_connection
+from app.db.database import fetch_one, get_connection
 from app.schemas.auth import UserProfile
 
 
@@ -22,40 +22,41 @@ def _verify_password(password: str, encoded_password: str) -> bool:
     return hmac.compare_digest(expected, f"{salt_hex}${password_hash_hex}")
 
 
-def create_user(username: str, password: str) -> UserProfile:
+def create_user(name: str, email: str, password: str) -> UserProfile:
     password_hash = _hash_password(password, os.urandom(16))
 
     try:
         with get_connection() as connection:
             connection.execute(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                (username, password_hash),
+                "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+                (name, email, password_hash),
             )
             connection.commit()
+            row = connection.execute(
+                "SELECT id, name, email FROM users WHERE email = ?",
+                (email,),
+            ).fetchone()
     except sqlite3.IntegrityError as exc:
-        raise ValueError("Username already exists") from exc
+        raise ValueError("Email already exists") from exc
 
-    return UserProfile(username=username)
+    return UserProfile(id=row["id"], name=row["name"], email=row["email"])
 
 
-def get_user_by_username(username: str) -> Optional[UserProfile]:
-    with get_connection() as connection:
-        row = connection.execute(
-            "SELECT username FROM users WHERE username = ?",
-            (username,),
-        ).fetchone()
-
+def get_user_by_id(user_id: int) -> Optional[dict]:
+    row = fetch_one(
+        "SELECT id, name, email FROM users WHERE id = ?",
+        (user_id,),
+    )
     if row is None:
         return None
+    return {"id": row["id"], "name": row["name"], "email": row["email"]}
 
-    return UserProfile(username=row["username"])
 
-
-def authenticate_user(username: str, password: str) -> Optional[UserProfile]:
+def authenticate_user(email: str, password: str) -> Optional[UserProfile]:
     with get_connection() as connection:
         row = connection.execute(
-            "SELECT username, password_hash FROM users WHERE username = ?",
-            (username,),
+            "SELECT id, name, email, password_hash FROM users WHERE email = ?",
+            (email,),
         ).fetchone()
 
     if row is None:
@@ -63,4 +64,4 @@ def authenticate_user(username: str, password: str) -> Optional[UserProfile]:
     if not _verify_password(password, row["password_hash"]):
         return None
 
-    return UserProfile(username=row["username"])
+    return UserProfile(id=row["id"], name=row["name"], email=row["email"])
