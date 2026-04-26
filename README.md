@@ -1,6 +1,6 @@
 # UNS-BE
 
-FastAPI base project for the UNS backend.
+FastAPI backend for the AI PM Workspace MVP.
 
 ## Quick start
 
@@ -13,20 +13,53 @@ docker compose up -d postgres
 uvicorn app.main:app --reload
 ```
 
-Server:
+Open `http://127.0.0.1:8000/docs` for Swagger.
 
-- API docs: `http://127.0.0.1:8000/docs`
-- Health check: `GET /health`
-- Sign up: `POST /api/v1/auth/signup`
-- Login: `POST /api/v1/auth/login`
-- Current user: `GET /api/v1/auth/me`
+## Implemented MVP API areas
 
-Example auth body:
+- Auth: signup, login, current user
+- Workspace: create, detail, invite lookup, invite regenerate/deactivate
+- Invite: validate and join
+- Project: create, list, detail
+- Project member profile: create/update/list
+- Backlog: list/create/update/delete
+- Sprint: create/list/add issues
+- Issue: create, status update, assignee update
+- AI: task generation, assignment recommendation, assignment confirmation
+- Chat: shared AI PM chat, personal AI chat
+- Dashboard: issue counts, workload summary, bottleneck text
+
+## Example auth payloads
+
+Signup:
 
 ```json
 {
-  "username": "kanghee",
-  "password": "admin1234"
+  "name": "Kanghee",
+  "email": "kanghee@example.com",
+  "password": "password123"
+}
+```
+
+Login:
+
+```json
+{
+  "email": "kanghee@example.com",
+  "password": "password123"
+}
+```
+
+Project profile:
+
+```json
+{
+  "project_role": "BACKEND",
+  "tech_stack": ["FastAPI", "SQLite", "JWT"],
+  "strong_tasks": ["API", "database", "auth"],
+  "disliked_tasks": ["design"],
+  "available_hours_per_day": 6,
+  "experience_level": "ADVANCED"
 }
 ```
 
@@ -34,17 +67,20 @@ Example auth body:
 
 ```text
 app/
-  api/
+  api/v1/
   core/
   db/
   schemas/
   services/
+docs/
 tests/
 ```
 
 ## Notes
 
-The auth flow now uses PostgreSQL via `APP_DATABASE_URL`.
-For local development, `docker compose up -d postgres` starts a ready-to-use database on `localhost:55432`.
-SQLite is still supported for tests or lightweight local runs with a URL such as `sqlite:///./uns.db`.
-Passwords are stored as salted PBKDF2 hashes for local development.
+- The app uses PostgreSQL via `APP_DATABASE_URL` by default.
+- `docker compose up -d postgres` starts a local database on `localhost:55432`.
+- SQLite is still supported for tests or lightweight local runs with a URL such as `sqlite:///./uns.db`.
+- Passwords are stored as salted PBKDF2 hashes.
+- The current AI features are deterministic MVP logic intended for hackathon demos.
+- Product and API planning notes live in `docs/ai-pm-workspace-spec.md`.
