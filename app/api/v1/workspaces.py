@@ -1,12 +1,19 @@
 from fastapi import APIRouter, Depends, Request
 
 from app.core.deps import get_current_user
-from app.schemas.workspace import InviteInfoResponse, InviteRegenerateRequest, WorkspaceCreateRequest, WorkspaceResponse
+from app.schemas.workspace import (
+    InviteInfoResponse,
+    InviteRegenerateRequest,
+    WorkspaceCreateRequest,
+    WorkspaceListItemResponse,
+    WorkspaceResponse,
+)
 from app.services.workspace import (
     create_workspace,
     deactivate_invite,
     get_invite_info,
     get_workspace,
+    list_workspaces,
     regenerate_invite,
 )
 
@@ -16,6 +23,14 @@ router = APIRouter()
 
 def _base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
+
+
+@router.get("", response_model=list[WorkspaceListItemResponse])
+async def list_workspaces_endpoint(
+    current_user: dict = Depends(get_current_user),
+) -> list[WorkspaceListItemResponse]:
+    workspaces = list_workspaces(current_user["id"])
+    return [WorkspaceListItemResponse(**workspace) for workspace in workspaces]
 
 
 @router.post("", response_model=WorkspaceResponse)
@@ -70,4 +85,3 @@ async def deactivate_invite_endpoint(
 ) -> InviteInfoResponse:
     invite = deactivate_invite(workspace_id, current_user["id"], _base_url(request))
     return InviteInfoResponse(**invite)
-

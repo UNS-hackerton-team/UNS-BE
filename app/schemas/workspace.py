@@ -24,6 +24,18 @@ class WorkspaceResponse(BaseModel):
     created_at: str
 
 
+class WorkspaceListItemResponse(BaseModel):
+    id: int
+    name: str
+    description: str
+    team_type: str
+    owner_id: int
+    workspace_role: str
+    invite_code_active: bool
+    member_count: int
+    created_at: str
+
+
 class InviteInfoResponse(BaseModel):
     workspace_id: int
     workspace_name: str

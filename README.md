@@ -18,7 +18,7 @@ Open `http://127.0.0.1:8000/docs` for Swagger.
 ## Implemented MVP API areas
 
 - Auth: signup, login, current user
-- Workspace: create, detail, invite lookup, invite regenerate/deactivate
+- Workspace: list, create, detail, invite lookup, invite regenerate/deactivate
 - Invite: validate and join
 - Project: create, list, detail
 - Project member profile: create/update/list

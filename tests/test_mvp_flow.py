@@ -54,6 +54,17 @@ def test_full_mvp_flow() -> None:
         workspace = workspace_response.json()
         workspace_id = workspace["id"]
 
+        second_workspace_response = client.post(
+            "/api/v1/workspaces",
+            json={
+                "name": "Another Org",
+                "description": "Second workspace for the same owner",
+                "team_type": "Company",
+            },
+            headers=owner_headers,
+        )
+        assert second_workspace_response.status_code == 200
+
         invite_response = client.get(
             f"/api/v1/workspaces/{workspace_id}/invite",
             headers=owner_headers,
@@ -71,6 +82,25 @@ def test_full_mvp_flow() -> None:
         )
         assert join_response.status_code == 200
         assert join_response.json()["joined"] is True
+
+        owner_workspace_list_response = client.get(
+            "/api/v1/workspaces",
+            headers=owner_headers,
+        )
+        assert owner_workspace_list_response.status_code == 200
+        owner_workspaces = owner_workspace_list_response.json()
+        assert len(owner_workspaces) == 2
+        assert owner_workspaces[0]["workspace_role"] == "OWNER"
+
+        member_workspace_list_response = client.get(
+            "/api/v1/workspaces",
+            headers=member_headers,
+        )
+        assert member_workspace_list_response.status_code == 200
+        member_workspaces = member_workspace_list_response.json()
+        assert len(member_workspaces) == 1
+        assert member_workspaces[0]["id"] == workspace_id
+        assert member_workspaces[0]["workspace_role"] == "MEMBER"
 
         project_response = client.post(
             f"/api/v1/workspaces/{workspace_id}/projects",

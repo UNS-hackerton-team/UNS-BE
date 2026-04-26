@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import HTTPException, status
 
-from app.db.database import execute, fetch_one
+from app.db.database import execute, fetch_all, fetch_one
 
 
 def _generate_invite_code() -> str:
@@ -29,6 +29,34 @@ def create_workspace(owner_id: int, name: str, description: str, team_type: str)
         (workspace_id, owner_id),
     )
     return get_workspace(workspace_id, owner_id)
+
+
+def list_workspaces(user_id: int) -> list[dict]:
+    rows = fetch_all(
+        """
+        SELECT
+            w.id,
+            w.name,
+            w.description,
+            w.team_type,
+            w.owner_id,
+            membership.workspace_role,
+            w.invite_code_active,
+            (
+                SELECT COUNT(*)
+                FROM workspace_members wm
+                WHERE wm.workspace_id = w.id
+            ) AS member_count,
+            w.created_at
+        FROM workspaces w
+        JOIN workspace_members membership
+            ON membership.workspace_id = w.id
+        WHERE membership.user_id = ?
+        ORDER BY w.created_at DESC, w.id DESC
+        """,
+        (user_id,),
+    )
+    return [dict(row) for row in rows]
 
 
 def get_workspace(workspace_id: int, user_id: int) -> dict:

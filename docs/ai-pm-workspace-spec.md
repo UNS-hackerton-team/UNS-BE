@@ -219,6 +219,9 @@
   - 권한: 로그인 사용자
 
 ### 9.2 워크스페이스/초대
+- `GET /api/v1/workspaces`
+  - Response: 내가 속한 워크스페이스 목록
+  - 권한: 로그인 사용자
 - `POST /api/v1/workspaces`
   - Request: `{ "name": "", "description": "", "team_type": "" }`
   - Response: 워크스페이스 상세
