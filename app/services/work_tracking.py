@@ -559,11 +559,7 @@ class LinearClient:
 
 
 def _find_current_cycle(cycles: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
-<<<<<<< HEAD
-    now = datetime.now(UTC)
-=======
     now = datetime.now(timezone.utc)
->>>>>>> e2d1179 (Update auth flow and add work tracking APIs)
     active_cycles: list[tuple[datetime, dict[str, Any]]] = []
     for cycle in cycles:
         start_date = _parse_datetime(cycle.get("startsAt"))

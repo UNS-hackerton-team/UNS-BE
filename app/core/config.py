@@ -49,6 +49,7 @@ class Settings(BaseSettings):
         database_path = self.app_database_path or "uns.db"
         return f"sqlite:///{database_path}"
 
+    @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.app_cors_origins.split(",") if origin.strip()]
 
