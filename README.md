@@ -20,6 +20,9 @@ Server:
 - Sign up: `POST /api/v1/auth/signup`
 - Login: `POST /api/v1/auth/login`
 - Current user: `GET /api/v1/auth/me`
+- Jira snapshot: `POST /api/v1/work-tracking/jira/snapshot`
+- Linear snapshot: `POST /api/v1/work-tracking/linear/snapshot`
+- Dashboard: `POST /api/v1/work-tracking/dashboard`
 
 Example auth body:
 
@@ -27,6 +30,33 @@ Example auth body:
 {
   "username": "kanghee",
   "password": "admin1234"
+}
+```
+
+Example dashboard body:
+
+```json
+{
+  "group_by": "project",
+  "include_items": false,
+  "jira": {
+    "boards": [
+      {
+        "board_id": 12,
+        "sprint_state": "active",
+        "include_backlog": true
+      }
+    ]
+  },
+  "linear": {
+    "teams": [
+      {
+        "team_id": "your-linear-team-id",
+        "include_current_cycle": true,
+        "include_backlog": true
+      }
+    ]
+  }
 }
 ```
 
@@ -48,3 +78,6 @@ The auth flow now uses PostgreSQL via `APP_DATABASE_URL`.
 For local development, `docker compose up -d postgres` starts a ready-to-use database on `localhost:55432`.
 SQLite is still supported for tests or lightweight local runs with a URL such as `sqlite:///./uns.db`.
 Passwords are stored as salted PBKDF2 hashes for local development.
+Jira uses the official Agile REST API for board, sprint, and backlog data.
+Linear uses its GraphQL API for team, cycle, and issue data.
+Dashboard progress is calculated from normalized work items and supports grouping by source, scope, project, team, assignee, label, or status category.
