@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     app_debug: bool = True
     app_host: str = "0.0.0.0"
     app_port: int = 8000
+    app_public_base_url: str = "http://localhost:8000"
+    app_frontend_url: str = "http://localhost:5173"
     app_database_url: Optional[str] = "postgresql://postgres:postgres@localhost:55432/uns"
     app_database_path: Optional[str] = None
     app_cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
@@ -23,10 +25,18 @@ class Settings(BaseSettings):
     jira_default_board_ids: str = ""
     jira_story_points_field: Optional[str] = None
     jira_timeout_seconds: float = 20.0
+    jira_oauth_client_id: Optional[str] = None
+    jira_oauth_client_secret: Optional[str] = None
+    jira_oauth_scopes: str = "read:jira-work offline_access"
     linear_api_url: str = "https://api.linear.app/graphql"
     linear_api_key: Optional[str] = None
     linear_default_team_ids: str = ""
     linear_timeout_seconds: float = 20.0
+    linear_oauth_client_id: Optional[str] = None
+    linear_oauth_client_secret: Optional[str] = None
+    linear_oauth_scopes: str = "read,write"
+    gemini_api_key: Optional[str] = None
+    gemini_model: str = "gemini-2.0-flash"
 
     @property
     def database_url(self) -> str:
@@ -70,6 +80,22 @@ class Settings(BaseSettings):
             for raw_value in self.linear_default_team_ids.split(",")
             if raw_value.strip()
         ]
+
+    @property
+    def normalized_public_base_url(self) -> str:
+        return self.app_public_base_url.rstrip("/")
+
+    @property
+    def normalized_frontend_url(self) -> str:
+        return self.app_frontend_url.rstrip("/")
+
+    @property
+    def jira_oauth_redirect_uri(self) -> str:
+        return f"{self.normalized_public_base_url}/api/v1/integrations/oauth/jira/callback"
+
+    @property
+    def linear_oauth_redirect_uri(self) -> str:
+        return f"{self.normalized_public_base_url}/api/v1/integrations/oauth/linear/callback"
 
     model_config = SettingsConfigDict(
         env_file=".env",

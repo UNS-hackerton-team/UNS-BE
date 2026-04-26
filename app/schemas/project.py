@@ -14,6 +14,7 @@ class ProjectCreateRequest(BaseModel):
     pm_id: Optional[int] = None
     priority: str = "HIGH"
     mvp_scope: str = Field(min_length=5)
+    ai_prompt: str = ""
 
 
 class ProjectResponse(BaseModel):

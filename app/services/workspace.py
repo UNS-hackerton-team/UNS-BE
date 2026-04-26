@@ -129,7 +129,7 @@ def regenerate_invite(
     execute(
         """
         UPDATE workspaces
-        SET invite_code = ?, invite_code_active = 1, invite_code_expires_at = ?, invite_code_max_uses = ?, invite_code_used_count = 0
+        SET invite_code = ?, invite_code_active = TRUE, invite_code_expires_at = ?, invite_code_max_uses = ?, invite_code_used_count = 0
         WHERE id = ?
         """,
         (_generate_invite_code(), expires_at, max_uses, workspace_id),
@@ -140,7 +140,7 @@ def regenerate_invite(
 def deactivate_invite(workspace_id: int, user_id: int, base_url: str) -> dict:
     require_workspace_owner(workspace_id, user_id)
     execute(
-        "UPDATE workspaces SET invite_code_active = 0 WHERE id = ?",
+        "UPDATE workspaces SET invite_code_active = FALSE WHERE id = ?",
         (workspace_id,),
     )
     return get_invite_info(workspace_id, user_id, base_url)

@@ -1,163 +1,67 @@
 # UNS-BE
 
-FastAPI backend for the AI PM Workspace MVP.
+FastAPI backend for the UNS workspace dashboard. The current build includes:
 
-## Quick start
+- workspace and project bootstrap
+- PM ownership transfer
+- project AI prompt and memory storage
+- Jira / Linear OAuth connection scaffolding
+- project-level BE / FE / DE domain mapping
+- delivery dashboard aggregation
+- team and personal AI chat over WebSocket
+- optional Gemini-backed AI replies via environment variables
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-docker compose up -d postgres
-uvicorn app.main:app --reload
-```
+## Local development
 
-Open `http://127.0.0.1:8000/docs` for Swagger.
-
-## Docker
-
-Create `.env` first:
-
-```bash
-cp .env.example .env
-```
-
-Run both app and database:
+1. Copy [`.env.example`](/C:/git/UNS-BE/.env.example) to `.env`
+2. Fill in any optional keys you want to use
+3. Start the stack
 
 ```bash
 docker compose up --build
 ```
 
-Useful commands:
+Services:
+
+- Backend API: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
+- Frontend: `http://localhost:5173`
+- Postgres: `localhost:55432`
+
+## Key environment variables
+
+Core:
+
+- `APP_DATABASE_URL`
+- `APP_PUBLIC_BASE_URL`
+- `APP_FRONTEND_URL`
+- `APP_CORS_ORIGINS`
+
+Gemini:
+
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+
+Jira OAuth:
+
+- `JIRA_OAUTH_CLIENT_ID`
+- `JIRA_OAUTH_CLIENT_SECRET`
+- `JIRA_OAUTH_SCOPES`
+
+Linear OAuth:
+
+- `LINEAR_OAUTH_CLIENT_ID`
+- `LINEAR_OAUTH_CLIENT_SECRET`
+- `LINEAR_OAUTH_SCOPES`
+
+Legacy direct snapshot support is still available through:
+
+- `JIRA_BASE_URL`
+- `JIRA_API_TOKEN`
+- `LINEAR_API_KEY`
+
+## Tests
 
 ```bash
-docker compose up -d postgres
-docker compose up --build app
-docker compose down
+python -m pytest -q tests -p no:cacheprovider
 ```
-
-When the app runs inside Docker, it connects to PostgreSQL with:
-
-```env
-APP_DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/uns
-```
-
-From your local machine, direct DB access stays:
-
-```env
-APP_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:55432/uns
-```
-
-## Main endpoints
-
-- API docs: `http://127.0.0.1:8000/docs`
-- Health check: `GET /health`
-- Sign up: `POST /api/v1/auth/signup`
-- Login: `POST /api/v1/auth/login`
-- Current user: `GET /api/v1/auth/me`
-- Jira snapshot: `POST /api/v1/work-tracking/jira/snapshot`
-- Linear snapshot: `POST /api/v1/work-tracking/linear/snapshot`
-- Unified dashboard: `POST /api/v1/work-tracking/dashboard`
-
-## Implemented MVP API areas
-
-- Auth: signup, login, current user
-- Workspace: list, create, detail, invite lookup, invite regenerate/deactivate
-- Invite: validate and join
-- Project: create, list, detail
-- Project member profile: create/update/list
-- Backlog: list/create/update/delete
-- Sprint: create/list/add issues
-- Issue: create, status update, assignee update
-- AI: task generation, assignment recommendation, assignment confirmation
-- Chat: shared AI PM chat, personal AI chat
-- Dashboard: issue counts, workload summary, bottleneck text
-- External work tracking: Jira sprint/backlog snapshot, Linear cycle/backlog snapshot, unified progress dashboard
-
-## Example auth payloads
-
-Signup:
-
-```json
-{
-  "name": "Kanghee",
-  "email": "kanghee@example.com",
-  "password": "password123"
-}
-```
-
-Login:
-
-```json
-{
-  "email": "kanghee@example.com",
-  "password": "password123"
-}
-```
-
-Project profile:
-
-```json
-{
-  "project_role": "BACKEND",
-  "tech_stack": ["FastAPI", "SQLite", "JWT"],
-  "strong_tasks": ["API", "database", "auth"],
-  "disliked_tasks": ["design"],
-  "available_hours_per_day": 6,
-  "experience_level": "ADVANCED"
-}
-```
-
-Example dashboard body:
-
-```json
-{
-  "group_by": "project",
-  "include_items": false,
-  "jira": {
-    "boards": [
-      {
-        "board_id": 12,
-        "sprint_state": "active",
-        "include_backlog": true
-      }
-    ]
-  },
-  "linear": {
-    "teams": [
-      {
-        "team_id": "your-linear-team-id",
-        "include_current_cycle": true,
-        "include_backlog": true
-      }
-    ]
-  }
-}
-```
-
-## Project structure
-
-```text
-app/
-  api/v1/
-  core/
-  db/
-  schemas/
-  services/
-docs/
-tests/
-```
-
-## Notes
-
-- The app uses PostgreSQL via `APP_DATABASE_URL` by default.
-- `docker compose up -d postgres` starts a local database on `localhost:55432`.
-- SQLite is still supported for tests or lightweight local runs with a URL such as `sqlite:///./uns.db`.
-- Frontend local dev origins are allowed through `APP_CORS_ORIGINS`.
-- Passwords are stored as salted PBKDF2 hashes.
-- The current AI features are deterministic MVP logic intended for hackathon demos.
-- Product and API planning notes live in `docs/ai-pm-workspace-spec.md`.
-- Jira uses the official Agile REST API for board, sprint, and backlog data.
-- Linear uses its GraphQL API for team, cycle, and issue data.
-- The unified dashboard progress API normalizes Jira and Linear items and can group results by source, scope, project, team, assignee, label, or status category.

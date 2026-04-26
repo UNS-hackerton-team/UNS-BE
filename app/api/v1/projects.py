@@ -60,6 +60,7 @@ async def create_project_endpoint(
         pm_id=payload.pm_id or current_user["id"],
         priority=payload.priority,
         mvp_scope=payload.mvp_scope,
+        ai_prompt=payload.ai_prompt,
     )
     return ProjectResponse(**project)
 

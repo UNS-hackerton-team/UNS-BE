@@ -24,8 +24,10 @@ def create_project(
     pm_id: int,
     priority: str,
     mvp_scope: str,
+    ai_prompt: str,
 ) -> dict:
     require_workspace_member(workspace_id, current_user_id)
+    require_workspace_member(workspace_id, pm_id)
     project_id = execute(
         """
         INSERT INTO projects (
@@ -62,6 +64,12 @@ def create_project(
             """,
             (project_id,),
         )
+    _ensure_project_defaults(
+        project_id=project_id,
+        created_by=current_user_id,
+        ai_prompt=ai_prompt,
+        tech_stack=tech_stack,
+    )
     return get_project(project_id, current_user_id)
 
 
@@ -571,3 +579,69 @@ def _serialize_project_member(row: dict) -> dict:
     row["strong_tasks"] = deserialize_list(row["strong_tasks"])
     row["disliked_tasks"] = deserialize_list(row["disliked_tasks"])
     return row
+
+
+def _ensure_project_defaults(
+    *,
+    project_id: int,
+    created_by: int,
+    ai_prompt: str,
+    tech_stack: list[str],
+) -> None:
+    existing_settings = fetch_one(
+        """
+        SELECT id
+        FROM project_settings
+        WHERE project_id = ?
+        """,
+        (project_id,),
+    )
+    if existing_settings is None:
+        execute(
+            """
+            INSERT INTO project_settings (
+                project_id, ai_prompt, tech_stack_notes, summary_cache, created_by, updated_by
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                ai_prompt.strip(),
+                "",
+                _build_project_summary(ai_prompt=ai_prompt, tech_stack=tech_stack),
+                created_by,
+                created_by,
+            ),
+        )
+
+    existing_domains = fetch_all(
+        """
+        SELECT id
+        FROM project_domains
+        WHERE project_id = ?
+        """,
+        (project_id,),
+    )
+    if existing_domains:
+        return
+
+    for code, name, color in (
+        ("BE", "Backend", "#2563EB"),
+        ("FE", "Frontend", "#F97316"),
+        ("DE", "Data", "#7C3AED"),
+    ):
+        execute(
+            """
+            INSERT INTO project_domains (project_id, code, name, color)
+            VALUES (?, ?, ?, ?)
+            """,
+            (project_id, code, name, color),
+        )
+
+
+def _build_project_summary(*, ai_prompt: str, tech_stack: list[str]) -> str:
+    parts = []
+    if ai_prompt.strip():
+        parts.append(ai_prompt.strip())
+    if tech_stack:
+        parts.append(f"Core stack: {', '.join(tech_stack)}")
+    return " | ".join(parts)

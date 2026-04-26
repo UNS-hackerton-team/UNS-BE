@@ -3,7 +3,8 @@ from typing import Optional
 import hashlib
 import hmac
 import os
-from app.db.database import execute, fetch_one
+
+from app.db.database import execute, fetch_one, table_has_column
 from app.schemas.auth import UserProfile
 
 
@@ -36,10 +37,16 @@ def create_user(name: str, password: str) -> UserProfile:
 
     password_hash = _hash_password(password, os.urandom(16))
     generated_email = _generated_email(name)
-    execute(
-        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-        (name, generated_email, password_hash),
-    )
+    if table_has_column("users", "username"):
+        execute(
+            "INSERT INTO users (username, name, email, password_hash) VALUES (?, ?, ?, ?)",
+            (name, name, generated_email, password_hash),
+        )
+    else:
+        execute(
+            "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+            (name, generated_email, password_hash),
+        )
     row = fetch_one(
         "SELECT id, name FROM users WHERE name = ?",
         (name,),

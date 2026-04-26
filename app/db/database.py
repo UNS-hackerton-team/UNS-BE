@@ -16,6 +16,8 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     func,
+    inspect,
+    text,
 )
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool, StaticPool
@@ -170,6 +172,122 @@ chat_messages_table = Table(
     Column("created_at", DateTime(timezone=True), server_default=func.now()),
 )
 
+project_settings_table = Table(
+    "project_settings",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+    Column("ai_prompt", Text, nullable=False, server_default=""),
+    Column("tech_stack_notes", Text, nullable=False, server_default=""),
+    Column("summary_cache", Text, nullable=False, server_default=""),
+    Column("created_by", Integer, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("updated_by", Integer, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), server_default=func.now()),
+    UniqueConstraint("project_id", name="uq_project_settings_project"),
+)
+
+project_domains_table = Table(
+    "project_domains",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+    Column("code", String(20), nullable=False),
+    Column("name", String(50), nullable=False),
+    Column("color", String(20), nullable=False, server_default="#0F172A"),
+    Column("is_active", Boolean, nullable=False, server_default="true"),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    UniqueConstraint("project_id", "code", name="uq_project_domains_project_code"),
+)
+
+project_domain_mappings_table = Table(
+    "project_domain_mappings",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+    Column("domain_id", Integer, ForeignKey("project_domains.id", ondelete="CASCADE"), nullable=False),
+    Column("source", String(20), nullable=False, server_default="any"),
+    Column("match_field", String(30), nullable=False),
+    Column("match_value", String(255), nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+)
+
+workspace_integrations_table = Table(
+    "workspace_integrations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("workspace_id", Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
+    Column("provider", String(20), nullable=False),
+    Column("external_workspace_id", String(255), nullable=False),
+    Column("external_workspace_name", String(255), nullable=False),
+    Column("external_workspace_url", String(255)),
+    Column("access_token", Text),
+    Column("refresh_token", Text),
+    Column("token_expires_at", String(50)),
+    Column("scope", Text),
+    Column("status", String(20), nullable=False, server_default="CONNECTED"),
+    Column("connected_by", Integer, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), server_default=func.now()),
+    UniqueConstraint(
+        "workspace_id",
+        "provider",
+        "external_workspace_id",
+        name="uq_workspace_integrations_workspace_provider_external",
+    ),
+)
+
+oauth_states_table = Table(
+    "oauth_states",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("workspace_id", Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
+    Column("provider", String(20), nullable=False),
+    Column("state", String(120), nullable=False, unique=True),
+    Column("created_by", Integer, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("redirect_to", String(255)),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+)
+
+project_integrations_table = Table(
+    "project_integrations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+    Column(
+        "workspace_integration_id",
+        Integer,
+        ForeignKey("workspace_integrations.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("provider", String(20), nullable=False),
+    Column("scope_type", String(30), nullable=False),
+    Column("scope_id", String(255), nullable=False),
+    Column("scope_name", String(255), nullable=False),
+    Column("settings", Text, nullable=False, server_default="{}"),
+    Column("is_active", Boolean, nullable=False, server_default="true"),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    UniqueConstraint(
+        "project_id",
+        "provider",
+        "scope_id",
+        name="uq_project_integrations_project_provider_scope",
+    ),
+)
+
+project_memory_entries_table = Table(
+    "project_memory_entries",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+    Column("memory_type", String(30), nullable=False),
+    Column("title", String(255), nullable=False),
+    Column("content", Text, nullable=False),
+    Column("status", String(20), nullable=False, server_default="ACTIVE"),
+    Column("created_by", Integer, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+)
+
 
 def serialize_list(values: Optional[list[str]]) -> str:
     return json.dumps(values or [])
@@ -224,7 +342,9 @@ def get_engine() -> Engine:
 def init_db() -> None:
     database_url = _database_url()
     _ensure_sqlite_directory_exists(database_url)
-    metadata.create_all(_get_engine(database_url))
+    engine = _get_engine(database_url)
+    metadata.create_all(engine)
+    _run_bootstrap_migrations(engine)
 
 
 def reset_db_state() -> None:
@@ -233,10 +353,74 @@ def reset_db_state() -> None:
     except Exception:
         pass
     _get_engine.cache_clear()
+    table_has_column.cache_clear()
+
+
+def _run_bootstrap_migrations(engine: Engine) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "users" not in tables:
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    statements: list[str] = []
+    if "name" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN name VARCHAR(50)")
+    if "email" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+        if "username" in columns:
+            connection.execute(
+                text(
+                    """
+                    UPDATE users
+                    SET name = COALESCE(NULLIF(name, ''), username)
+                    WHERE name IS NULL OR name = ''
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    UPDATE users
+                    SET email = COALESCE(NULLIF(email, ''), LOWER(username) || '.' || id || '@local.uns')
+                    WHERE email IS NULL OR email = ''
+                    """
+                )
+            )
+
+        connection.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email
+                ON users (email)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_users_name
+                ON users (name)
+                """
+            )
+        )
 
 
 def _backend_name() -> str:
     return make_url(_database_url()).get_backend_name()
+
+
+@lru_cache
+def table_has_column(table_name: str, column_name: str) -> bool:
+    inspector = inspect(get_engine())
+    if table_name not in inspector.get_table_names():
+        return False
+    return any(column["name"] == column_name for column in inspector.get_columns(table_name))
 
 
 def _prepare_query(query: str, backend_name: str, is_insert: bool) -> str:

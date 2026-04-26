@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from collections import Counter
 
 from fastapi import HTTPException
 
-from app.db.database import execute
+from app.db.database import execute, fetch_one, serialize_list
 from app.services.project import (
     create_backlog_item,
     get_backlog_item,
@@ -19,7 +21,7 @@ def generate_project_tasks(project_id: int, user_id: int, create_backlog: bool) 
     project = get_project(project_id, user_id)
     members = list_project_members(project_id, user_id)
     roles = [m["project_profile"]["project_role"] for m in members if m["project_profile"]]
-    role_counts = Counter(roles)
+    role_counts = Counter(role.upper() for role in roles)
 
     tasks = [
         {
@@ -34,7 +36,7 @@ def generate_project_tasks(project_id: int, user_id: int, create_backlog: bool) 
         {
             "title": "Set up project foundation",
             "description": f"Initialize repository structure and base architecture for {project['name']}.",
-            "required_role": "BACKEND" if role_counts.get("BACKEND", 0) else "FULLSTACK",
+            "required_role": "BACKEND" if role_counts.get("BACKEND", 0) or role_counts.get("BE", 0) else "FULLSTACK",
             "required_tech_stack": project["tech_stack"][:2],
             "difficulty": "MEDIUM",
             "estimated_hours": 3,
@@ -81,8 +83,8 @@ def generate_project_tasks(project_id: int, user_id: int, create_backlog: bool) 
     return {
         "project_summary": (
             f"{project['name']} targets {project['goal']}. "
-            f"The initial plan prioritizes scope definition, foundation work, core flow implementation, "
-            f"API/data alignment, and demo readiness."
+            "The initial plan prioritizes scope definition, foundation work, core flow implementation, "
+            "API/data alignment, and demo readiness."
         ),
         "tasks": tasks,
         "created_backlog_items": created_backlog_items,
@@ -153,7 +155,7 @@ def confirm_assignments(project_id: int, user_id: int, assignments: list[dict]) 
                 backlog_item["difficulty"],
                 backlog_item["estimated_hours"],
                 backlog_item.get("required_role"),
-                json_dumps(backlog_item["required_tech_stack"]),
+                serialize_list(backlog_item["required_tech_stack"]),
                 assignment["assignment_reason"],
                 user_id,
             ),
@@ -170,18 +172,10 @@ def confirm_assignments(project_id: int, user_id: int, assignments: list[dict]) 
     return {"created_issue_ids": created_issue_ids}
 
 
-def json_dumps(values: list[str]) -> str:
-    from app.db.database import serialize_list
-
-    return serialize_list(values)
-
-
 def _score_member(backlog_item: dict, member: dict, project_id: int) -> tuple[int, list[str]]:
-    from app.db.database import fetch_one
-
     score = 0
     reasons = []
-    if backlog_item.get("required_role") and member["project_role"] == backlog_item["required_role"]:
+    if backlog_item.get("required_role") and _role_matches(backlog_item["required_role"], member["project_role"]):
         score += 2
         reasons.append("Project role matches the task role")
 
@@ -190,17 +184,11 @@ def _score_member(backlog_item: dict, member: dict, project_id: int) -> tuple[in
         score += min(2, len(tech_matches))
         reasons.append(f"Matching tech stack: {', '.join(tech_matches)}")
 
-    strong_match = _keyword_match(backlog_item["title"], backlog_item["description"], member["strong_tasks"])
-    if strong_match:
+    if _keyword_match(backlog_item["title"], backlog_item["description"], member["strong_tasks"]):
         score += 2
         reasons.append("Task aligns with the member's strong tasks")
 
-    disliked_match = _keyword_match(
-        backlog_item["title"],
-        backlog_item["description"],
-        member["disliked_tasks"],
-    )
-    if disliked_match:
+    if _keyword_match(backlog_item["title"], backlog_item["description"], member["disliked_tasks"]):
         score -= 2
         reasons.append("Task overlaps with disliked work")
 
@@ -237,13 +225,30 @@ def _keyword_match(title: str, description: str, keywords: list[str]) -> bool:
     return any(keyword.lower() in text for keyword in keywords)
 
 
+def _role_matches(required_role: str, project_role: str) -> bool:
+    normalized_required = required_role.strip().upper()
+    normalized_role = project_role.strip().upper()
+    mapping = {
+        "BACKEND": {"BACKEND", "BE", "FULLSTACK"},
+        "FRONTEND": {"FRONTEND", "FE", "FULLSTACK"},
+        "DATA": {"DATA", "DE", "FULLSTACK"},
+        "BE": {"BACKEND", "BE", "FULLSTACK"},
+        "FE": {"FRONTEND", "FE", "FULLSTACK"},
+        "DE": {"DATA", "DE", "FULLSTACK"},
+        "PM": {"PM"},
+    }
+    if normalized_required == normalized_role:
+        return True
+    return normalized_role in mapping.get(normalized_required, set())
+
+
 def _to_stars(score: int) -> str:
     if score <= 1:
-        return "★☆☆☆☆"
+        return "1/5"
     if score == 2:
-        return "★★☆☆☆"
+        return "2/5"
     if score == 3:
-        return "★★★☆☆"
+        return "3/5"
     if score == 4:
-        return "★★★★☆"
-    return "★★★★★"
+        return "4/5"
+    return "5/5"

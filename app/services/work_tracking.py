@@ -226,27 +226,47 @@ def build_dashboard_areas(
 
 
 class JiraClient:
-    def __init__(self, settings: Settings):
-        if not settings.jira_base_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="JIRA_BASE_URL is not configured",
-            )
-        if not settings.jira_api_token:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="JIRA_API_TOKEN is not configured",
-            )
-
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        oauth_access_token: str | None = None,
+        oauth_cloud_id: str | None = None,
+        browse_base_url: str | None = None,
+        base_url: str | None = None,
+        api_token: str | None = None,
+        email: str | None = None,
+    ):
         headers = {"Accept": "application/json"}
         auth: httpx.BasicAuth | None = None
-        if settings.jira_email:
-            auth = httpx.BasicAuth(settings.jira_email, settings.jira_api_token)
+
+        if oauth_access_token and oauth_cloud_id:
+            headers["Authorization"] = f"Bearer {oauth_access_token}"
+            resolved_base_url = f"https://api.atlassian.com/ex/jira/{oauth_cloud_id}"
+            self._browse_base_url = (browse_base_url or "").rstrip("/") or resolved_base_url
         else:
-            headers["Authorization"] = f"Bearer {settings.jira_api_token}"
+            resolved_base_url = (base_url or settings.jira_base_url or "").rstrip("/")
+            resolved_api_token = api_token or settings.jira_api_token
+            resolved_email = email or settings.jira_email
+            if not resolved_base_url:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="JIRA_BASE_URL is not configured",
+                )
+            if not resolved_api_token:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="JIRA_API_TOKEN is not configured",
+                )
+
+            if resolved_email:
+                auth = httpx.BasicAuth(resolved_email, resolved_api_token)
+            else:
+                headers["Authorization"] = f"Bearer {resolved_api_token}"
+            self._browse_base_url = resolved_base_url
 
         self._settings = settings
-        self._base_url = settings.jira_base_url.rstrip("/")
+        self._base_url = resolved_base_url
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
             headers=headers,
@@ -361,7 +381,7 @@ class JiraClient:
             items.extend(
                 _normalize_jira_issue(
                     issue,
-                    base_url=self._base_url,
+                    base_url=self._browse_base_url,
                     board_name=board_name,
                     team_name=team_name,
                     scope_id=scope_id,
@@ -382,7 +402,7 @@ class JiraClient:
             items.extend(
                 _normalize_jira_issue(
                     issue,
-                    base_url=self._base_url,
+                    base_url=self._browse_base_url,
                     board_name=board_name,
                     team_name=team_name,
                     scope_id=scope_id,
@@ -403,18 +423,30 @@ class JiraClient:
             items=deduped_items,
         )
 
+    async def fetch_board_catalog(self, limit: int = 50) -> list[dict[str, Any]]:
+        return await self._paginate(
+            "/rest/agile/1.0/board",
+            collection_key="values",
+            limit=limit,
+        )
+
 
 class LinearClient:
-    def __init__(self, settings: Settings):
-        if not settings.linear_api_key:
+    def __init__(self, settings: Settings, *, access_token: str | None = None):
+        resolved_access_token = access_token or settings.linear_api_key
+        if not resolved_access_token:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="LINEAR_API_KEY is not configured",
             )
 
+        auth_header = resolved_access_token
+        if not auth_header.lower().startswith("bearer "):
+            auth_header = f"Bearer {resolved_access_token}"
+
         self._client = httpx.AsyncClient(
             headers={
-                "Authorization": settings.linear_api_key,
+                "Authorization": auth_header,
                 "Content-Type": "application/json",
             },
             timeout=settings.linear_timeout_seconds,
@@ -556,6 +588,29 @@ class LinearClient:
             summary=_work_item_summary(deduped_items),
             items=deduped_items,
         )
+
+    async def fetch_team_catalog(self, limit: int = 100) -> list[dict[str, Any]]:
+        payload = await self._query(
+            LINEAR_TEAM_DIRECTORY_QUERY,
+            {"first": limit},
+        )
+        return payload.get("teams", {}).get("nodes", [])
+
+    async def fetch_viewer_workspace(self) -> dict[str, Any]:
+        payload = await self._query(
+            """
+            query ViewerWorkspace {
+              viewer {
+                organization {
+                  id
+                  name
+                  urlKey
+                }
+              }
+            }
+            """
+        )
+        return ((payload.get("viewer") or {}).get("organization")) or {}
 
 
 def _find_current_cycle(cycles: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
@@ -791,4 +846,43 @@ async def fetch_dashboard(payload: DashboardRequest) -> DashboardResponse:
         ),
         scopes=scopes,
         items=list(items) if payload.include_items else [],
+    )
+
+
+def summarize_items(
+    items: Sequence[WorkItem],
+    *,
+    exclude_canceled_from_progress: bool = True,
+) -> ProgressSummary:
+    return _work_item_summary(
+        items,
+        exclude_canceled_from_progress=exclude_canceled_from_progress,
+    )
+
+
+def build_dashboard_response(
+    scopes: Sequence[WorkScopeSnapshot],
+    *,
+    group_by: DashboardGroupBy = "project",
+    include_items: bool = False,
+    exclude_canceled_from_progress: bool = True,
+) -> DashboardResponse:
+    items = [item for scope in scopes for item in scope.items]
+    return DashboardResponse(
+        summary=_work_item_summary(
+            items,
+            exclude_canceled_from_progress=exclude_canceled_from_progress,
+        ),
+        areas=build_dashboard_areas(
+            items,
+            group_by=group_by,
+            exclude_canceled_from_progress=exclude_canceled_from_progress,
+        ),
+        sources=build_dashboard_areas(
+            items,
+            group_by="source",
+            exclude_canceled_from_progress=exclude_canceled_from_progress,
+        ),
+        scopes=list(scopes),
+        items=list(items) if include_items else [],
     )

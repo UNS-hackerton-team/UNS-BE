@@ -1,59 +1,97 @@
-from typing import Optional
+from __future__ import annotations
+
+import json
+from collections import defaultdict
+from typing import Any, Optional
+
+from fastapi import WebSocket
 
 from app.db.database import execute, fetch_all, fetch_one
+from app.services.gemini_agent import generate_project_agent_reply
 from app.services.project import get_dashboard, get_project, require_project_member
+from app.services.project_hub import build_delivery_dashboard, build_personal_recommendation
 
 
-def send_team_message(project_id: int, user: dict, content: str) -> dict:
+class ChatConnectionManager:
+    def __init__(self) -> None:
+        self._connections: dict[str, set[WebSocket]] = defaultdict(set)
+
+    async def connect(self, room_key: str, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._connections[room_key].add(websocket)
+
+    def disconnect(self, room_key: str, websocket: WebSocket) -> None:
+        connections = self._connections.get(room_key)
+        if not connections:
+            return
+        connections.discard(websocket)
+        if not connections:
+            self._connections.pop(room_key, None)
+
+    async def broadcast(self, room_key: str, payload: dict[str, Any]) -> None:
+        stale: list[WebSocket] = []
+        for websocket in self._connections.get(room_key, set()):
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                stale.append(websocket)
+        for websocket in stale:
+            self.disconnect(room_key, websocket)
+
+
+connection_manager = ChatConnectionManager()
+
+
+async def send_team_message(project_id: int, user: dict, content: str) -> dict:
     require_project_member(project_id, user["id"])
     room_id = _get_or_create_room(project_id, "TEAM_AI", None)
-    user_message_id = execute(
-        """
-        INSERT INTO chat_messages (chat_room_id, sender_id, sender_type, content)
-        VALUES (?, ?, 'USER', ?)
-        """,
-        (room_id, user["id"], content),
-    )
-    answer = _build_team_answer(project_id, content, user["id"])
-    ai_message_id = execute(
-        """
-        INSERT INTO chat_messages (chat_room_id, sender_type, content, metadata)
-        VALUES (?, 'AI', ?, ?)
-        """,
-        (room_id, answer["summary"], answer["json"]),
-    )
+    user_message_id = _store_user_message(room_id, user["id"], content)
+    history = _list_room_messages(room_id, limit=12)
+    answer = await _build_team_answer(project_id, content, user, history)
+    ai_message_id = _store_ai_message(room_id, answer)
     return {
         "user_message_id": user_message_id,
         "ai_message_id": ai_message_id,
         "room_type": "TEAM_AI",
-        "answer": answer["payload"],
+        "answer": answer,
     }
 
 
-def send_personal_message(project_id: int, user: dict, content: str) -> dict:
+async def send_personal_message(project_id: int, user: dict, content: str) -> dict:
     require_project_member(project_id, user["id"])
     room_id = _get_or_create_room(project_id, "PERSONAL_AI", user["id"])
-    user_message_id = execute(
-        """
-        INSERT INTO chat_messages (chat_room_id, sender_id, sender_type, content)
-        VALUES (?, ?, 'USER', ?)
-        """,
-        (room_id, user["id"], content),
-    )
-    answer = _build_personal_answer(project_id, user["id"], content)
-    ai_message_id = execute(
-        """
-        INSERT INTO chat_messages (chat_room_id, sender_type, content, metadata)
-        VALUES (?, 'AI', ?, ?)
-        """,
-        (room_id, answer["summary"], answer["json"]),
-    )
+    user_message_id = _store_user_message(room_id, user["id"], content)
+    history = _list_room_messages(room_id, limit=12)
+    answer = await _build_personal_answer(project_id, user, content, history)
+    ai_message_id = _store_ai_message(room_id, answer)
     return {
         "user_message_id": user_message_id,
         "ai_message_id": ai_message_id,
         "room_type": "PERSONAL_AI",
-        "answer": answer["payload"],
+        "answer": answer,
     }
+
+
+def get_team_history(project_id: int, user_id: int) -> dict:
+    require_project_member(project_id, user_id)
+    room_id = _get_or_create_room(project_id, "TEAM_AI", None)
+    return {
+        "room_type": "TEAM_AI",
+        "messages": _list_room_messages(room_id, limit=100),
+    }
+
+
+def get_personal_history(project_id: int, user_id: int) -> dict:
+    require_project_member(project_id, user_id)
+    room_id = _get_or_create_room(project_id, "PERSONAL_AI", user_id)
+    return {
+        "room_type": "PERSONAL_AI",
+        "messages": _list_room_messages(room_id, limit=100),
+    }
+
+
+def room_key(project_id: int, room_type: str, user_id: Optional[int]) -> str:
+    return f"{project_id}:{room_type}:{user_id or 'shared'}"
 
 
 def _get_or_create_room(project_id: int, room_type: str, user_id: Optional[int]) -> int:
@@ -86,60 +124,143 @@ def _get_or_create_room(project_id: int, room_type: str, user_id: Optional[int])
     )
 
 
-def _build_team_answer(project_id: int, content: str, user_id: int) -> dict:
-    project = get_project(project_id, user_id)
-    dashboard = get_dashboard(project_id, user_id)
-    next_issue = dashboard.get("recommended_next_issue")
-    payload = {
-        "summary": f"Project {project['name']} should stay focused on MVP-critical work.",
-        "recommended_tasks": [next_issue] if next_issue else [],
+def _store_user_message(room_id: int, user_id: int, content: str) -> int:
+    return execute(
+        """
+        INSERT INTO chat_messages (chat_room_id, sender_id, sender_type, content)
+        VALUES (?, ?, 'USER', ?)
+        """,
+        (room_id, user_id, content),
+    )
+
+
+def _store_ai_message(room_id: int, answer: dict[str, Any]) -> int:
+    return execute(
+        """
+        INSERT INTO chat_messages (chat_room_id, sender_type, content, metadata)
+        VALUES (?, 'AI', ?, ?)
+        """,
+        (room_id, _answer_summary(answer), json.dumps(answer)),
+    )
+
+
+async def _build_team_answer(
+    project_id: int,
+    content: str,
+    user: dict,
+    history: list[dict],
+) -> dict:
+    gemini_answer = await generate_project_agent_reply(
+        project_id,
+        user,
+        "TEAM_AI",
+        content,
+        history,
+    )
+    if gemini_answer and "error" not in gemini_answer:
+        return gemini_answer
+
+    project = get_project(project_id, user["id"])
+    dashboard = get_dashboard(project_id, user["id"])
+    delivery_dashboard = await build_delivery_dashboard(project_id, user["id"])
+    next_item = delivery_dashboard["active_items"][0] if delivery_dashboard["active_items"] else None
+    domain_focus = delivery_dashboard["domains"][0] if delivery_dashboard["domains"] else None
+    answer = {
+        "summary": f"{project['name']} should keep focus on the smallest unblocked MVP slice.",
+        "recommended_tasks": [serialize_work_item(next_item)] if next_item else [],
         "risks": dashboard["risk_issues"],
         "next_action": (
-            f"Start with issue #{next_issue['id']} - {next_issue['title']}"
-            if next_issue
-            else "Create or assign the next highest-priority issue."
+            f"Pull '{next_item.title}' next."
+            if next_item
+            else "Map external delivery scopes or create the next backlog issue."
         ),
-        "priority": "HIGH",
-        "reasoning": dashboard["bottleneck_summary"],
+        "priority": project["priority"],
+        "reasoning": (
+            f"Most active delivery pressure is in {domain_focus['code']}."
+            if domain_focus
+            else dashboard["bottleneck_summary"]
+        ),
+        "context_notes": delivery_dashboard["integration_warnings"],
         "question": content,
+        "provider": "local",
     }
-    import json
+    if gemini_answer and gemini_answer.get("error"):
+        answer["context_notes"] = answer["context_notes"] + [gemini_answer["summary"]]
+    return answer
 
-    return {
-        "summary": payload["summary"],
-        "json": json.dumps(payload),
-        "payload": payload,
+
+async def _build_personal_answer(
+    project_id: int,
+    user: dict,
+    content: str,
+    history: list[dict],
+) -> dict:
+    gemini_answer = await generate_project_agent_reply(
+        project_id,
+        user,
+        "PERSONAL_AI",
+        content,
+        history,
+    )
+    if gemini_answer and "error" not in gemini_answer:
+        return gemini_answer
+
+    recommendation = build_personal_recommendation(project_id, user["id"])
+    answer = {
+        "summary": recommendation["summary"],
+        "current_assignments": recommendation["current_assignments"],
+        "recommended_tasks": recommendation["recommended_backlog"],
+        "recommended_order": [
+            "Finish your current assigned work first",
+            "Pull the highest-fit unclaimed backlog item",
+            "Confirm scope with PM if the task is ambiguous",
+            "Move active work to review as soon as the smallest slice is done",
+        ],
+        "context_notes": recommendation["context_notes"],
+        "question": content,
+        "provider": "local",
     }
+    if gemini_answer and gemini_answer.get("error"):
+        answer["context_notes"] = answer["context_notes"] + [gemini_answer["summary"]]
+    return answer
 
 
-def _build_personal_answer(project_id: int, user_id: int, content: str) -> dict:
+def _list_room_messages(room_id: int, *, limit: int) -> list[dict]:
     rows = fetch_all(
         """
-        SELECT id, title, status, priority
-        FROM issues
-        WHERE project_id = ? AND assignee_id = ? AND status != 'DONE'
-        ORDER BY CASE priority WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END, id ASC
+        SELECT *
+        FROM chat_messages
+        WHERE chat_room_id = ?
+        ORDER BY id DESC
+        LIMIT ?
         """,
-        (project_id, user_id),
+        (room_id, limit),
     )
-    issues = [dict(row) for row in rows]
-    top_issue = issues[0] if issues else None
-    payload = {
-        "summary": "Focus on your highest-priority assigned work first.",
-        "current_assignments": issues,
-        "recommended_order": [
-            "Clarify acceptance criteria",
-            "Implement the smallest working slice",
-            "Test the result",
-            "Move the issue to REVIEW",
-        ],
-        "top_priority_issue": top_issue,
-        "question": content,
-    }
-    import json
+    messages = [dict(row) for row in rows]
+    messages.reverse()
+    return messages
 
+
+def _answer_summary(answer: dict[str, Any]) -> str:
+    summary = answer.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        return summary.strip()
+    next_action = answer.get("next_action")
+    if isinstance(next_action, str) and next_action.strip():
+        return next_action.strip()
+    return json.dumps(answer)
+
+
+def serialize_work_item(item: Any | None) -> dict[str, Any] | None:
+    if item is None:
+        return None
     return {
-        "summary": payload["summary"],
-        "json": json.dumps(payload),
-        "payload": payload,
+        "source": getattr(item, "source", None),
+        "external_id": getattr(item, "external_id", None),
+        "title": getattr(item, "title", None),
+        "status_name": getattr(item, "status_name", None),
+        "status_category": getattr(item, "status_category", None),
+        "priority": getattr(item, "priority", None),
+        "assignee_name": getattr(item, "assignee_name", None),
+        "url": getattr(item, "url", None),
     }
