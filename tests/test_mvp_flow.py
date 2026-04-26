@@ -18,10 +18,10 @@ def _reset_database() -> None:
     reset_db_state()
 
 
-def _signup(client: TestClient, name: str, email: str, password: str) -> str:
+def _signup(client: TestClient, name: str, password: str) -> str:
     response = client.post(
         "/api/v1/auth/signup",
-        json={"name": name, "email": email, "password": password},
+        json={"name": name, "password": password},
     )
     assert response.status_code == 201
     return response.json()["access_token"]
@@ -31,8 +31,8 @@ def test_full_mvp_flow() -> None:
     _reset_database()
 
     with TestClient(app) as client:
-        owner_token = _signup(client, "Owner", "owner@example.com", "password123")
-        member_token = _signup(client, "Member", "member@example.com", "password123")
+        owner_token = _signup(client, "Owner", "password123")
+        member_token = _signup(client, "Member", "password123")
 
         owner_headers = {"Authorization": f"Bearer {owner_token}"}
         member_headers = {"Authorization": f"Bearer {member_token}"}

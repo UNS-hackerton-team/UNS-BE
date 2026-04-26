@@ -20,41 +20,48 @@ def _verify_password(password: str, encoded_password: str) -> bool:
     return hmac.compare_digest(expected, f"{salt_hex}${password_hash_hex}")
 
 
-def create_user(name: str, email: str, password: str) -> UserProfile:
+def _generated_email(name: str) -> str:
+    slug = "".join(ch.lower() for ch in name if ch.isalnum()) or "user"
+    random_suffix = os.urandom(4).hex()
+    return f"{slug}.{random_suffix}@local.uns"
+
+
+def create_user(name: str, password: str) -> UserProfile:
     existing = fetch_one(
-        "SELECT id FROM users WHERE email = ?",
-        (email,),
+        "SELECT id FROM users WHERE name = ?",
+        (name,),
     )
     if existing is not None:
-        raise ValueError("Email already exists")
+        raise ValueError("Name already exists")
 
     password_hash = _hash_password(password, os.urandom(16))
+    generated_email = _generated_email(name)
     execute(
         "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-        (name, email, password_hash),
+        (name, generated_email, password_hash),
     )
     row = fetch_one(
-        "SELECT id, name, email FROM users WHERE email = ?",
-        (email,),
+        "SELECT id, name FROM users WHERE name = ?",
+        (name,),
     )
 
-    return UserProfile(id=row["id"], name=row["name"], email=row["email"])
+    return UserProfile(id=row["id"], name=row["name"])
 
 
 def get_user_by_id(user_id: int) -> Optional[dict]:
     row = fetch_one(
-        "SELECT id, name, email FROM users WHERE id = ?",
+        "SELECT id, name FROM users WHERE id = ?",
         (user_id,),
     )
     if row is None:
         return None
-    return {"id": row["id"], "name": row["name"], "email": row["email"]}
+    return {"id": row["id"], "name": row["name"], "email": None}
 
 
-def authenticate_user(email: str, password: str) -> Optional[UserProfile]:
+def authenticate_user(name: str, password: str) -> Optional[UserProfile]:
     row = fetch_one(
-        "SELECT id, name, email, password_hash FROM users WHERE email = ?",
-        (email,),
+        "SELECT id, name, password_hash FROM users WHERE name = ?",
+        (name,),
     )
 
     if row is None:
@@ -62,4 +69,4 @@ def authenticate_user(email: str, password: str) -> Optional[UserProfile]:
     if not _verify_password(password, row["password_hash"]):
         return None
 
-    return UserProfile(id=row["id"], name=row["name"], email=row["email"])
+    return UserProfile(id=row["id"], name=row["name"])

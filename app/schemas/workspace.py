@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -21,7 +22,7 @@ class WorkspaceResponse(BaseModel):
     invite_code_max_uses: Optional[int] = None
     invite_code_used_count: int
     member_count: int
-    created_at: str
+    created_at: datetime
 
 
 class WorkspaceListItemResponse(BaseModel):
@@ -33,7 +34,7 @@ class WorkspaceListItemResponse(BaseModel):
     workspace_role: str
     invite_code_active: bool
     member_count: int
-    created_at: str
+    created_at: datetime
 
 
 class InviteInfoResponse(BaseModel):

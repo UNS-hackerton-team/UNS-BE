@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from functools import lru_cache
 from typing import Optional
 
@@ -12,16 +14,17 @@ class Settings(BaseSettings):
     app_port: int = 8000
     app_database_url: Optional[str] = "postgresql://postgres:postgres@localhost:55432/uns"
     app_database_path: Optional[str] = None
+    app_cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     app_secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 60
-    jira_base_url: str | None = None
-    jira_email: str | None = None
-    jira_api_token: str | None = None
+    jira_base_url: Optional[str] = None
+    jira_email: Optional[str] = None
+    jira_api_token: Optional[str] = None
     jira_default_board_ids: str = ""
-    jira_story_points_field: str | None = None
+    jira_story_points_field: Optional[str] = None
     jira_timeout_seconds: float = 20.0
     linear_api_url: str = "https://api.linear.app/graphql"
-    linear_api_key: str | None = None
+    linear_api_key: Optional[str] = None
     linear_default_team_ids: str = ""
     linear_timeout_seconds: float = 20.0
 
@@ -45,6 +48,9 @@ class Settings(BaseSettings):
 
         database_path = self.app_database_path or "uns.db"
         return f"sqlite:///{database_path}"
+
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.app_cors_origins.split(",") if origin.strip()]
 
     @property
     def jira_default_board_id_list(self) -> list[int]:

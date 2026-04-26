@@ -12,7 +12,7 @@ router = APIRouter()
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def signup(payload: SignupRequest) -> AuthResponse:
     try:
-        user = create_user(payload.name, payload.email, payload.password)
+        user = create_user(payload.name, payload.password)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -25,11 +25,11 @@ async def signup(payload: SignupRequest) -> AuthResponse:
 
 @router.post("/login", response_model=AuthResponse)
 async def login(payload: LoginRequest) -> AuthResponse:
-    user = authenticate_user(payload.email, payload.password)
+    user = authenticate_user(payload.name, payload.password)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="Invalid name or password",
         )
 
     token = create_access_token(subject=str(user.id))

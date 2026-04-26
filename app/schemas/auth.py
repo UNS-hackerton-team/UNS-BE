@@ -1,20 +1,21 @@
-from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
 class SignupRequest(BaseModel):
     name: str = Field(min_length=2, max_length=50)
-    email: EmailStr
     password: str
 
 
 class UserProfile(BaseModel):
     id: int
     name: str
-    email: EmailStr
+    email: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    name: str = Field(min_length=2, max_length=50)
     password: str
 
 

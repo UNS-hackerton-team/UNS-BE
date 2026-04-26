@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -27,7 +28,7 @@ class ProjectResponse(BaseModel):
     pm_id: int
     priority: str
     mvp_scope: str
-    created_at: str
+    created_at: datetime
 
 
 class ProjectProfileRequest(BaseModel):
@@ -44,22 +45,22 @@ class ProjectMemberProfileResponse(BaseModel):
     project_id: int
     user_id: int
     user_name: str
-    user_email: str
+    user_email: Optional[str] = None
     project_role: str
     tech_stack: list[str]
     strong_tasks: list[str]
     disliked_tasks: list[str]
     available_hours_per_day: int
     experience_level: str
-    joined_at: str
+    joined_at: datetime
 
 
 class TeamMemberSummary(BaseModel):
     user_id: int
     user_name: str
-    user_email: str
+    user_email: Optional[str] = None
     workspace_role: str
-    joined_at: str
+    joined_at: datetime
     project_profile: Optional[ProjectMemberProfileResponse] = None
 
 
@@ -96,7 +97,7 @@ class BacklogResponse(BaseModel):
     estimated_hours: int
     status: str
     linked_issue_id: Optional[int] = None
-    created_at: str
+    created_at: datetime
 
 
 class SprintCreateRequest(BaseModel):
@@ -114,7 +115,7 @@ class SprintResponse(BaseModel):
     start_date: str
     end_date: str
     status: str
-    created_at: str
+    created_at: datetime
 
 
 class SprintIssueAddRequest(BaseModel):
@@ -160,7 +161,7 @@ class IssueResponse(BaseModel):
     assignment_reason: Optional[str] = None
     due_date: Optional[str] = None
     created_by: Optional[int] = None
-    created_at: str
+    created_at: datetime
 
 
 class DashboardResponse(BaseModel):

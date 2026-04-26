@@ -154,6 +154,7 @@ tests/
 - The app uses PostgreSQL via `APP_DATABASE_URL` by default.
 - `docker compose up -d postgres` starts a local database on `localhost:55432`.
 - SQLite is still supported for tests or lightweight local runs with a URL such as `sqlite:///./uns.db`.
+- Frontend local dev origins are allowed through `APP_CORS_ORIGINS`.
 - Passwords are stored as salted PBKDF2 hashes.
 - The current AI features are deterministic MVP logic intended for hackathon demos.
 - Product and API planning notes live in `docs/ai-pm-workspace-spec.md`.

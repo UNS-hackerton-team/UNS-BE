@@ -170,7 +170,7 @@ def get_project_member_profile(project_id: int, user_id: int) -> dict:
         SELECT
             pm.*,
             u.name AS user_name,
-            u.email AS user_email
+            NULL AS user_email
         FROM project_members pm
         JOIN users u ON u.id = pm.user_id
         WHERE pm.project_id = ? AND pm.user_id = ?
@@ -189,7 +189,7 @@ def list_project_members(project_id: int, user_id: int) -> list[dict]:
         SELECT
             u.id AS user_id,
             u.name AS user_name,
-            u.email AS user_email,
+            NULL AS user_email,
             wm.workspace_role,
             wm.joined_at,
             pm.id AS profile_id,

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -33,8 +34,8 @@ class JiraSnapshotRequest(BaseModel):
 
 
 class LinearTeamScopeRequest(BaseModel):
-    team_id: str | None = None
-    team_key: str | None = None
+    team_id: Optional[str] = None
+    team_key: Optional[str] = None
     issue_limit: int = Field(default=250, ge=1, le=500)
     cycle_limit: int = Field(default=6, ge=1, le=20)
     include_current_cycle: bool = True
@@ -52,8 +53,8 @@ class LinearSnapshotRequest(BaseModel):
 
 
 class DashboardRequest(BaseModel):
-    jira: JiraSnapshotRequest | None = None
-    linear: LinearSnapshotRequest | None = None
+    jira: Optional[JiraSnapshotRequest] = None
+    linear: Optional[LinearSnapshotRequest] = None
     group_by: DashboardGroupBy = "project"
     include_items: bool = False
     exclude_canceled_from_progress: bool = True
@@ -63,13 +64,13 @@ class WorkIteration(BaseModel):
     source: Literal["jira", "linear"]
     external_id: str
     name: str
-    state: str | None = None
+    state: Optional[str] = None
     scope_id: str
     scope_name: str
-    start_date: datetime | None = None
-    end_date: datetime | None = None
-    goal: str | None = None
-    progress: float | None = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    goal: Optional[str] = None
+    progress: Optional[float] = None
 
 
 class WorkItem(BaseModel):
@@ -78,22 +79,22 @@ class WorkItem(BaseModel):
     scope_name: str
     external_id: str
     title: str
-    url: str | None = None
-    project_name: str | None = None
-    team_name: str | None = None
-    assignee_name: str | None = None
+    url: Optional[str] = None
+    project_name: Optional[str] = None
+    team_name: Optional[str] = None
+    assignee_name: Optional[str] = None
     status_name: str
     status_category: WorkStatusCategory
     labels: list[str] = Field(default_factory=list)
-    estimate: float | None = None
-    priority: str | None = None
+    estimate: Optional[float] = None
+    priority: Optional[str] = None
     is_backlog: bool = False
     is_current_iteration: bool = False
-    iteration_id: str | None = None
-    iteration_name: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-    completed_at: datetime | None = None
+    iteration_id: Optional[str] = None
+    iteration_name: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class ProgressSummary(BaseModel):
@@ -103,10 +104,10 @@ class ProgressSummary(BaseModel):
     in_progress_items: int
     done_items: int
     canceled_items: int
-    total_estimate: float | None = None
-    completed_estimate: float | None = None
+    total_estimate: Optional[float] = None
+    completed_estimate: Optional[float] = None
     completion_rate: float
-    weighted_completion_rate: float | None = None
+    weighted_completion_rate: Optional[float] = None
 
 
 class WorkScopeSnapshot(BaseModel):
