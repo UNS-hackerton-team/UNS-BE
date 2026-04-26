@@ -1,4 +1,9 @@
+import os
+
 from fastapi.testclient import TestClient
+
+os.environ["APP_DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
+os.environ.pop("APP_DATABASE_PATH", None)
 
 from app.main import app
 from app.schemas.work_tracking import (

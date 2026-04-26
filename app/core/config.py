@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,8 +10,8 @@ class Settings(BaseSettings):
     app_debug: bool = True
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    app_database_url: str | None = "postgresql://postgres:postgres@localhost:55432/uns"
-    app_database_path: str | None = None
+    app_database_url: Optional[str] = "postgresql://postgres:postgres@localhost:55432/uns"
+    app_database_path: Optional[str] = None
     app_secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 60
     jira_base_url: str | None = None

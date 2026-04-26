@@ -3,11 +3,7 @@ from typing import Optional
 import hashlib
 import hmac
 import os
-
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-
-from app.db.database import get_engine, users_table
+from app.db.database import execute, fetch_one
 from app.schemas.auth import UserProfile
 
 
@@ -24,45 +20,46 @@ def _verify_password(password: str, encoded_password: str) -> bool:
     return hmac.compare_digest(expected, f"{salt_hex}${password_hash_hex}")
 
 
-def create_user(username: str, password: str) -> UserProfile:
+def create_user(name: str, email: str, password: str) -> UserProfile:
+    existing = fetch_one(
+        "SELECT id FROM users WHERE email = ?",
+        (email,),
+    )
+    if existing is not None:
+        raise ValueError("Email already exists")
+
     password_hash = _hash_password(password, os.urandom(16))
+    execute(
+        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+        (name, email, password_hash),
+    )
+    row = fetch_one(
+        "SELECT id, name, email FROM users WHERE email = ?",
+        (email,),
+    )
 
-    try:
-        with get_engine().begin() as connection:
-            connection.execute(
-                users_table.insert().values(
-                    username=username,
-                    password_hash=password_hash,
-                )
-            )
-    except IntegrityError as exc:
-        raise ValueError("Username already exists") from exc
-
-    return UserProfile(username=username)
+    return UserProfile(id=row["id"], name=row["name"], email=row["email"])
 
 
-def get_user_by_username(username: str) -> Optional[UserProfile]:
-    statement = select(users_table.c.username).where(users_table.c.username == username)
-    with get_engine().connect() as connection:
-        row = connection.execute(statement).mappings().first()
-
+def get_user_by_id(user_id: int) -> Optional[dict]:
+    row = fetch_one(
+        "SELECT id, name, email FROM users WHERE id = ?",
+        (user_id,),
+    )
     if row is None:
         return None
+    return {"id": row["id"], "name": row["name"], "email": row["email"]}
 
-    return UserProfile(username=row["username"])
 
-
-def authenticate_user(username: str, password: str) -> Optional[UserProfile]:
-    statement = select(
-        users_table.c.username,
-        users_table.c.password_hash,
-    ).where(users_table.c.username == username)
-    with get_engine().connect() as connection:
-        row = connection.execute(statement).mappings().first()
+def authenticate_user(email: str, password: str) -> Optional[UserProfile]:
+    row = fetch_one(
+        "SELECT id, name, email, password_hash FROM users WHERE email = ?",
+        (email,),
+    )
 
     if row is None:
         return None
     if not _verify_password(password, row["password_hash"]):
         return None
 
-    return UserProfile(username=row["username"])
+    return UserProfile(id=row["id"], name=row["name"], email=row["email"])
