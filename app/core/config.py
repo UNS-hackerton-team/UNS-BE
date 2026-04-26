@@ -9,10 +9,9 @@ class Settings(BaseSettings):
     app_debug: bool = True
     app_host: str = "0.0.0.0"
     app_port: int = 8000
+    app_database_path: str = "uns.db"
     app_secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 60
-    demo_user_email: str = "admin@example.com"
-    demo_user_password: str = "admin1234"
 
     model_config = SettingsConfigDict(
         env_file=".env",

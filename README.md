@@ -16,14 +16,15 @@ Server:
 
 - API docs: `http://127.0.0.1:8000/docs`
 - Health check: `GET /health`
+- Sign up: `POST /api/v1/auth/signup`
 - Login: `POST /api/v1/auth/login`
 - Current user: `GET /api/v1/auth/me`
 
-Example login body:
+Example auth body:
 
 ```json
 {
-  "email": "admin@example.com",
+  "username": "kanghee",
   "password": "admin1234"
 }
 ```
@@ -41,5 +42,5 @@ tests/
 
 ## Notes
 
-The login flow currently uses demo credentials from `.env`.
-Replace `app/services/auth.py` with real database-backed authentication when you wire up users.
+The auth flow now uses a local SQLite database file configured by `APP_DATABASE_PATH`.
+Passwords are stored as salted PBKDF2 hashes for local development.
