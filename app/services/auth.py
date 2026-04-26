@@ -3,9 +3,11 @@ from typing import Optional
 import hashlib
 import hmac
 import os
-import sqlite3
 
-from app.db.database import get_connection
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from app.db.database import get_engine, users_table
 from app.schemas.auth import UserProfile
 
 
@@ -26,24 +28,23 @@ def create_user(username: str, password: str) -> UserProfile:
     password_hash = _hash_password(password, os.urandom(16))
 
     try:
-        with get_connection() as connection:
+        with get_engine().begin() as connection:
             connection.execute(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                (username, password_hash),
+                users_table.insert().values(
+                    username=username,
+                    password_hash=password_hash,
+                )
             )
-            connection.commit()
-    except sqlite3.IntegrityError as exc:
+    except IntegrityError as exc:
         raise ValueError("Username already exists") from exc
 
     return UserProfile(username=username)
 
 
 def get_user_by_username(username: str) -> Optional[UserProfile]:
-    with get_connection() as connection:
-        row = connection.execute(
-            "SELECT username FROM users WHERE username = ?",
-            (username,),
-        ).fetchone()
+    statement = select(users_table.c.username).where(users_table.c.username == username)
+    with get_engine().connect() as connection:
+        row = connection.execute(statement).mappings().first()
 
     if row is None:
         return None
@@ -52,11 +53,12 @@ def get_user_by_username(username: str) -> Optional[UserProfile]:
 
 
 def authenticate_user(username: str, password: str) -> Optional[UserProfile]:
-    with get_connection() as connection:
-        row = connection.execute(
-            "SELECT username, password_hash FROM users WHERE username = ?",
-            (username,),
-        ).fetchone()
+    statement = select(
+        users_table.c.username,
+        users_table.c.password_hash,
+    ).where(users_table.c.username == username)
+    with get_engine().connect() as connection:
+        row = connection.execute(statement).mappings().first()
 
     if row is None:
         return None

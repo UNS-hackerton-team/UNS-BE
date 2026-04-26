@@ -9,6 +9,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+docker compose up -d postgres
 uvicorn app.main:app --reload
 ```
 
@@ -35,6 +36,7 @@ Example auth body:
 app/
   api/
   core/
+  db/
   schemas/
   services/
 tests/
@@ -42,5 +44,7 @@ tests/
 
 ## Notes
 
-The auth flow now uses a local SQLite database file configured by `APP_DATABASE_PATH`.
+The auth flow now uses PostgreSQL via `APP_DATABASE_URL`.
+For local development, `docker compose up -d postgres` starts a ready-to-use database on `localhost:55432`.
+SQLite is still supported for tests or lightweight local runs with a URL such as `sqlite:///./uns.db`.
 Passwords are stored as salted PBKDF2 hashes for local development.

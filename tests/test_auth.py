@@ -1,11 +1,11 @@
 import os
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-os.environ["APP_DATABASE_PATH"] = str(Path(__file__).parent / "test_auth.db")
+os.environ["APP_DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
 
 from app.core.config import get_settings
+from app.db.database import reset_db_state
 from app.main import app
 
 
@@ -13,9 +13,7 @@ get_settings.cache_clear()
 
 
 def _reset_database() -> None:
-    database_path = Path(os.environ["APP_DATABASE_PATH"])
-    if database_path.exists():
-        database_path.unlink()
+    reset_db_state()
 
 
 def test_health_check() -> None:
