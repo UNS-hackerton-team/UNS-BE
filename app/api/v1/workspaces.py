@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
+
+from app.core.config import get_settings
 
 from app.core.deps import get_current_user
 from app.schemas.workspace import (
@@ -19,10 +21,6 @@ from app.services.workspace import (
 
 
 router = APIRouter()
-
-
-def _base_url(request: Request) -> str:
-    return str(request.base_url).rstrip("/")
 
 
 @router.get("", response_model=list[WorkspaceListItemResponse])
@@ -53,10 +51,13 @@ async def get_workspace_endpoint(
 @router.get("/{workspace_id}/invite", response_model=InviteInfoResponse)
 async def get_workspace_invite_endpoint(
     workspace_id: int,
-    request: Request,
     current_user: dict = Depends(get_current_user),
 ) -> InviteInfoResponse:
-    invite = get_invite_info(workspace_id, current_user["id"], _base_url(request))
+    invite = get_invite_info(
+        workspace_id,
+        current_user["id"],
+        get_settings().normalized_frontend_url,
+    )
     return InviteInfoResponse(**invite)
 
 
@@ -64,7 +65,6 @@ async def get_workspace_invite_endpoint(
 async def regenerate_invite_endpoint(
     workspace_id: int,
     payload: InviteRegenerateRequest,
-    request: Request,
     current_user: dict = Depends(get_current_user),
 ) -> InviteInfoResponse:
     invite = regenerate_invite(
@@ -72,7 +72,7 @@ async def regenerate_invite_endpoint(
         current_user["id"],
         payload.expires_at,
         payload.max_uses,
-        _base_url(request),
+        get_settings().normalized_frontend_url,
     )
     return InviteInfoResponse(**invite)
 
@@ -80,8 +80,11 @@ async def regenerate_invite_endpoint(
 @router.patch("/{workspace_id}/invite/deactivate", response_model=InviteInfoResponse)
 async def deactivate_invite_endpoint(
     workspace_id: int,
-    request: Request,
     current_user: dict = Depends(get_current_user),
 ) -> InviteInfoResponse:
-    invite = deactivate_invite(workspace_id, current_user["id"], _base_url(request))
+    invite = deactivate_invite(
+        workspace_id,
+        current_user["id"],
+        get_settings().normalized_frontend_url,
+    )
     return InviteInfoResponse(**invite)

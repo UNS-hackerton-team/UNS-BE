@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "UNS API"
+    app_name: str = "UNP API"
     app_env: str = "local"
     app_debug: bool = True
     app_host: str = "0.0.0.0"
